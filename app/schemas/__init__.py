@@ -158,7 +158,7 @@ class ApprovalResponse(BaseModel):
 
 
 class ApprovalAction(BaseModel):
-    action: str
+    action: Optional[str] = None
     remark: Optional[str] = None
 
 
@@ -193,6 +193,21 @@ class NotificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class MarkReadBatchRequest(BaseModel):
+    ids: list[int]
+
+
+class UnreadCountResponse(BaseModel):
+    unread_count: int
 
 
 class Token(BaseModel):
@@ -243,6 +258,8 @@ class EquipmentUpdate(BaseModel):
 
 class EquipmentResponse(EquipmentBase):
     id: int
+    fault_count: int = 0
+    is_frequent_fault: bool = False
     created_at: datetime
 
     class Config:
@@ -357,6 +374,7 @@ class WorkOrderUpdateRequest(BaseModel):
 class FloorUtilization(BaseModel):
     floor: int
     resource_type: ResourceType
+    total_resources: int
     total_hours: float
     booked_hours: float
     utilization_rate: float
@@ -379,5 +397,98 @@ class DailyReport(BaseModel):
     work_order_stats: WorkOrderStats
 
 
+class WeeklyReport(BaseModel):
+    year: int
+    week: int
+    data_available: bool
+    floor_utilizations: List[FloorUtilization]
+    total_revenue: float
+    overall_utilization_rate: float
+    work_order_stats: WorkOrderStats
+
+
+class MonthlyReport(BaseModel):
+    year: int
+    month: int
+    data_available: bool
+    floor_utilizations: List[FloorUtilization]
+    total_revenue: float
+    overall_utilization_rate: float
+    work_order_stats: WorkOrderStats
+
+
 class ReportListResponse(BaseModel):
     reports: List[DailyReport]
+
+
+class TrendPoint(BaseModel):
+    period: str
+    value: float
+
+
+class TrendResponse(BaseModel):
+    start_date: str
+    end_date: str
+    period: str
+    data_points: List[TrendPoint]
+
+
+class FloorComparison(BaseModel):
+    floor: int
+    total_resources: int
+    total_hours: float
+    booked_hours: float
+    utilization_rate: float
+    revenue: float
+    work_order_count: int
+
+
+class ResourceTypeComparison(BaseModel):
+    resource_type: ResourceType
+    total_resources: int
+    total_hours: float
+    booked_hours: float
+    utilization_rate: float
+    revenue: float
+    work_order_count: int
+
+
+class ComparisonResponse(BaseModel):
+    report_date: str
+    floor_comparisons: List[FloorComparison]
+    resource_type_comparisons: List[ResourceTypeComparison]
+
+
+class MaintenanceRecordCreate(BaseModel):
+    work_order_id: Optional[int] = None
+    result: str
+    materials_used: Optional[str] = None
+    photo_url: Optional[str] = None
+    needs_recheck: Optional[bool] = False
+    recheck_date: Optional[datetime] = None
+    remark: Optional[str] = None
+
+
+class MaintenanceRecordResponse(BaseModel):
+    id: int
+    work_order_id: int
+    equipment_id: int
+    engineer_id: int
+    result: str
+    materials_used: Optional[str] = None
+    photo_url: Optional[str] = None
+    needs_recheck: bool
+    recheck_date: Optional[datetime] = None
+    remark: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MaintenanceRecordListResponse(BaseModel):
+    items: list[MaintenanceRecordResponse]
+    total: int
+    page: int
+    page_size: int

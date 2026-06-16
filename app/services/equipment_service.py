@@ -80,7 +80,7 @@ class EquipmentService:
                 "message": "设备离线"
             }
             anomaly_details.append(detail)
-            if FaultSeverity.HIGH.value > max_severity.value:
+            if FaultSeverity.HIGH.priority > max_severity.priority:
                 max_severity = FaultSeverity.HIGH
 
         if temperature is not None and temperature > equipment.temp_threshold:
@@ -90,12 +90,15 @@ class EquipmentService:
                 "message": f"温度过高：{temperature}°C（阈值：{equipment.temp_threshold}°C）"
             }
             anomaly_details.append(detail)
-            if temperature > equipment.temp_threshold * 1.2:
-                if FaultSeverity.CRITICAL.value > max_severity.value:
-                    max_severity = FaultSeverity.CRITICAL
+            temp_ratio = temperature / equipment.temp_threshold
+            if temp_ratio >= 1.5:
+                severity = FaultSeverity.CRITICAL
+            elif temp_ratio >= 1.2:
+                severity = FaultSeverity.HIGH
             else:
-                if FaultSeverity.MEDIUM.value > max_severity.value:
-                    max_severity = FaultSeverity.MEDIUM
+                severity = FaultSeverity.MEDIUM
+            if severity.priority > max_severity.priority:
+                max_severity = severity
 
         if current is not None and current > equipment.current_threshold:
             is_anomaly = True
@@ -104,12 +107,15 @@ class EquipmentService:
                 "message": f"电流过高：{current}A（阈值：{equipment.current_threshold}A）"
             }
             anomaly_details.append(detail)
-            if current > equipment.current_threshold * 1.2:
-                if FaultSeverity.HIGH.value > max_severity.value:
-                    max_severity = FaultSeverity.HIGH
+            current_ratio = current / equipment.current_threshold
+            if current_ratio >= 1.5:
+                severity = FaultSeverity.CRITICAL
+            elif current_ratio >= 1.2:
+                severity = FaultSeverity.HIGH
             else:
-                if FaultSeverity.MEDIUM.value > max_severity.value:
-                    max_severity = FaultSeverity.MEDIUM
+                severity = FaultSeverity.MEDIUM
+            if severity.priority > max_severity.priority:
+                max_severity = severity
 
         return is_anomaly, anomaly_details, max_severity
 

@@ -75,6 +75,16 @@ class FaultSeverity(str, enum.Enum):
     HIGH = "high"
     CRITICAL = "critical"
 
+    @property
+    def priority(self) -> int:
+        priority_map = {
+            FaultSeverity.LOW: 1,
+            FaultSeverity.MEDIUM: 2,
+            FaultSeverity.HIGH: 3,
+            FaultSeverity.CRITICAL: 4,
+        }
+        return priority_map[self]
+
 
 class WorkOrderStatus(str, enum.Enum):
     PENDING = "pending"
@@ -228,12 +238,15 @@ class Equipment(Base):
     resource_id = Column(Integer, ForeignKey("resources.id"))
     temp_threshold = Column(Float, default=80.0, nullable=False)
     current_threshold = Column(Float, default=15.0, nullable=False)
+    fault_count = Column(Integer, default=0, nullable=False)
+    is_frequent_fault = Column(Boolean, default=False, nullable=False)
     description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     data_records = relationship("EquipmentData", back_populates="equipment")
     work_orders = relationship("WorkOrder", back_populates="equipment")
+    maintenance_records = relationship("MaintenanceRecord", back_populates="equipment")
 
 
 class EquipmentData(Base):
@@ -264,6 +277,7 @@ class Engineer(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     work_orders = relationship("WorkOrder", back_populates="engineer")
+    maintenance_records = relationship("MaintenanceRecord", back_populates="engineer")
 
 
 class WorkOrder(Base):
@@ -290,3 +304,25 @@ class WorkOrder(Base):
 
     equipment = relationship("Equipment", back_populates="work_orders")
     engineer = relationship("Engineer", back_populates="work_orders")
+    maintenance_record = relationship("MaintenanceRecord", back_populates="work_order", uselist=False)
+
+
+class MaintenanceRecord(Base):
+    __tablename__ = "maintenance_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_order_id = Column(Integer, ForeignKey("work_orders.id"), nullable=False, index=True)
+    equipment_id = Column(Integer, ForeignKey("equipments.id"), nullable=False, index=True)
+    engineer_id = Column(Integer, ForeignKey("engineers.id"), nullable=False, index=True)
+    result = Column(Text, nullable=False)
+    materials_used = Column(Text)
+    photo_url = Column(String(500))
+    needs_recheck = Column(Boolean, default=False, nullable=False)
+    recheck_date = Column(DateTime(timezone=True))
+    remark = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    work_order = relationship("WorkOrder", back_populates="maintenance_record")
+    equipment = relationship("Equipment", back_populates="maintenance_records")
+    engineer = relationship("Engineer", back_populates="maintenance_records")

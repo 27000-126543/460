@@ -1,14 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import (
     MemberCreate, MemberUpdate, MemberResponse, MemberListResponse,
-    MemberLogin, Token, NotificationResponse
+    MemberLogin, Token, NotificationResponse, NotificationListResponse,
+    MarkReadBatchRequest, UnreadCountResponse
 )
-from app.services import MemberService
+from app.services import MemberService, notification_service
 from app.deps import get_current_member
 from app.utils import create_access_token
-from app.models import Member, Notification
+from app.models import Member
+from typing import Optional
 
 router = APIRouter(prefix="/members", tags=["会员管理"])
 
@@ -51,31 +53,60 @@ def update_profile(
     return updated
 
 
-@router.get("/notifications", response_model=list[NotificationResponse], summary="获取我的通知")
-def get_my_notifications(
-    page: int = 1,
-    page_size: int = 20,
+@router.get("/notifications", response_model=NotificationListResponse, summary="我的通知列表")
+def list_member_notifications(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    type: Optional[str] = None,
+    is_read: Optional[bool] = None,
     current_member: Member = Depends(get_current_member),
     db: Session = Depends(get_db)
 ):
-    notifications = db.query(Notification).filter(
-        Notification.member_id == current_member.id
-    ).order_by(Notification.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    return notifications
+    items, total = notification_service.list_member_notifications(
+        db, current_member.id, page, page_size, type, is_read
+    )
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
-@router.post("/notifications/{notification_id}/read", summary="标记通知已读")
+@router.post("/notifications/{notification_id}/read", summary="标记单条通知已读")
 def mark_notification_read(
     notification_id: int,
     current_member: Member = Depends(get_current_member),
     db: Session = Depends(get_db)
 ):
-    notification = db.query(Notification).filter(
-        Notification.id == notification_id,
-        Notification.member_id == current_member.id
-    ).first()
+    notification = notification_service.mark_as_read(
+        db, notification_id, "member", current_member.id
+    )
     if not notification:
         raise HTTPException(status_code=404, detail="通知不存在")
-    notification.is_read = True
-    db.commit()
     return {"message": "已标记为已读"}
+
+
+@router.post("/notifications/read-batch", summary="批量标记通知已读")
+def mark_batch_read(
+    request: MarkReadBatchRequest,
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db)
+):
+    count = notification_service.mark_batch_as_read(
+        db, request.ids, "member", current_member.id
+    )
+    return {"message": f"已标记 {count} 条为已读", "count": count}
+
+
+@router.post("/notifications/read-all", summary="全部标记已读")
+def mark_all_read(
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db)
+):
+    count = notification_service.mark_all_as_read(db, "member", current_member.id)
+    return {"message": f"已全部标记为已读", "count": count}
+
+
+@router.get("/notifications/unread-count", response_model=UnreadCountResponse, summary="未读数量")
+def get_unread_count(
+    current_member: Member = Depends(get_current_member),
+    db: Session = Depends(get_db)
+):
+    count = notification_service.get_unread_count(db, "member", current_member.id)
+    return {"unread_count": count}

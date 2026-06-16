@@ -45,6 +45,10 @@ def approve_booking(
     if not approval:
         raise HTTPException(status_code=404, detail="审批记录不存在")
 
+    action_value = action.action or "approve"
+    if action_value != "approve":
+        raise HTTPException(status_code=400, detail="操作类型不匹配")
+
     success, message = ApprovalService.approve_booking(
         db, approval.booking_id, current_admin, action.remark or ""
     )
@@ -63,6 +67,10 @@ def reject_booking(
     approval = ApprovalService.get_approval_by_id(db, approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="审批记录不存在")
+
+    action_value = action.action or "reject"
+    if action_value != "reject":
+        raise HTTPException(status_code=400, detail="操作类型不匹配")
 
     if not action.remark:
         raise HTTPException(status_code=400, detail="拒绝原因不能为空")

@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import (
     MemberResponse, MemberListResponse, MemberUpdate,
-    BookingListResponse, ResourceResponse, Token
+    BookingListResponse, ResourceResponse, Token,
+    NotificationListResponse, MarkReadBatchRequest, UnreadCountResponse
 )
-from app.services import MemberService, BookingService
+from app.services import MemberService, BookingService, notification_service
 from app.deps import get_current_admin
 from app.models import Admin, MemberLevel, BookingStatus
 from app.utils import verify_password, create_access_token
@@ -94,3 +95,62 @@ def list_all_bookings(
         booking_dict["resource_name"] = booking.resource.name if booking.resource else ""
         result.append(booking_dict)
     return {"items": result, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/notifications", response_model=NotificationListResponse, summary="管理员通知列表")
+def list_admin_notifications(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    type: Optional[str] = None,
+    is_read: Optional[bool] = None,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    items, total = notification_service.list_admin_notifications(
+        db, current_admin.id, page, page_size, type, is_read
+    )
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.post("/notifications/{notification_id}/read", summary="标记单条通知已读")
+def mark_notification_read(
+    notification_id: int,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    notification = notification_service.mark_as_read(
+        db, notification_id, "admin", current_admin.id
+    )
+    if not notification:
+        raise HTTPException(status_code=404, detail="通知不存在")
+    return {"message": "已标记为已读"}
+
+
+@router.post("/notifications/read-batch", summary="批量标记通知已读")
+def mark_batch_read(
+    request: MarkReadBatchRequest,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    count = notification_service.mark_batch_as_read(
+        db, request.ids, "admin", current_admin.id
+    )
+    return {"message": f"已标记 {count} 条为已读", "count": count}
+
+
+@router.post("/notifications/read-all", summary="全部标记已读")
+def mark_all_read(
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    count = notification_service.mark_all_as_read(db, "admin", current_admin.id)
+    return {"message": f"已全部标记为已读", "count": count}
+
+
+@router.get("/notifications/unread-count", response_model=UnreadCountResponse, summary="未读数量")
+def get_unread_count(
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    count = notification_service.get_unread_count(db, "admin", current_admin.id)
+    return {"unread_count": count}

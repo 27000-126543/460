@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import (
     EquipmentCreate, EquipmentUpdate, EquipmentResponse,
-    EquipmentListResponse, EquipmentDataReport, EquipmentDataResponse, AnomalyReportResponse
+    EquipmentListResponse, EquipmentDataReport, EquipmentDataResponse, AnomalyReportResponse,
+    MaintenanceRecordResponse
 )
-from app.services import EquipmentService
+from app.services import EquipmentService, WorkOrderService
 from app.models import EquipmentType, EquipmentStatus
-from typing import Optional
+from typing import Optional, List
 
 router = APIRouter(prefix="/equipments", tags=["设备管理"])
 
@@ -98,3 +99,28 @@ def get_latest_equipment_data(
     if not latest_data:
         raise HTTPException(status_code=404, detail="暂无数据")
     return latest_data
+
+
+@router.get("/{equipment_id}/maintenance-records", response_model=List[MaintenanceRecordResponse], summary="设备历史维修记录")
+def get_equipment_maintenance_records(
+    equipment_id: int,
+    db: Session = Depends(get_db)
+):
+    equipment = EquipmentService.get_equipment_by_id(db, equipment_id)
+    if not equipment:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    records = WorkOrderService.get_maintenance_records_by_equipment(db, equipment_id)
+    return records
+
+
+@router.put("/{equipment_id}/frequent-fault", response_model=EquipmentResponse, summary="标记/取消反复故障设备")
+def mark_equipment_frequent_fault(
+    equipment_id: int,
+    is_frequent: bool = Query(..., description="是否标记为反复故障"),
+    db: Session = Depends(get_db)
+):
+    success, msg, equipment = WorkOrderService.mark_equipment_frequent_fault(db, equipment_id, is_frequent)
+    if not success:
+        raise HTTPException(status_code=404, detail=msg)
+    return equipment

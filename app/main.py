@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
 from app.routers import members, resources, bookings, approvals, payments, admin, equipments, work_orders, reports
-from app.routers.work_orders import engineer_router
+from app.routers.work_orders import engineer_router, maintenance_router
 from app.scheduler import start_scheduler, stop_scheduler
 
 Base.metadata.create_all(bind=engine)
@@ -32,6 +32,7 @@ app.include_router(admin.router, prefix="/api/v1")
 app.include_router(equipments.router, prefix="/api/v1")
 app.include_router(work_orders.router, prefix="/api/v1")
 app.include_router(engineer_router, prefix="/api/v1")
+app.include_router(maintenance_router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 
 

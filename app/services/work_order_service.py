@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from app.models import WorkOrder, Engineer, Equipment, WorkOrderStatus, EquipmentStatus, FaultType, FaultSeverity
-from app.schemas import EngineerCreate
+from app.models import WorkOrder, Engineer, Equipment, WorkOrderStatus, EquipmentStatus, FaultType, FaultSeverity, MaintenanceRecord
+from app.schemas import EngineerCreate, MaintenanceRecordCreate
 from app.services.notification_service import notify_work_order_created, notify_work_order_escalated, notify_work_order_assigned
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
@@ -312,3 +312,90 @@ class WorkOrderService:
         order.status = WorkOrderStatus.ESCALATED
         order.escalated_at = now
         notify_work_order_escalated(db, order, order.escalation_level + 1)
+
+    @staticmethod
+    def complete_work_order(
+        db: Session,
+        work_order_id: int,
+        engineer_id: int,
+        record_data: MaintenanceRecordCreate
+    ) -> Tuple[bool, str, Optional[WorkOrder], Optional[MaintenanceRecord]]:
+        work_order = WorkOrderService.get_order_by_id(db, work_order_id)
+        if not work_order:
+            return False, "工单不存在", None, None
+
+        if work_order.engineer_id != engineer_id:
+            return False, "只有被分配的工程师才能完成工单", None, None
+
+        if work_order.status not in [WorkOrderStatus.IN_PROGRESS]:
+            return False, f"当前状态{work_order.status.value}无法完成", None, None
+
+        work_order.status = WorkOrderStatus.COMPLETED
+        work_order.completed_at = datetime.now()
+
+        now = datetime.now()
+        maintenance_record = MaintenanceRecord(
+            work_order_id=work_order_id,
+            equipment_id=work_order.equipment_id,
+            engineer_id=engineer_id,
+            result=record_data.result,
+            materials_used=record_data.materials_used,
+            photo_url=record_data.photo_url,
+            needs_recheck=record_data.needs_recheck or False,
+            recheck_date=record_data.recheck_date,
+            remark=record_data.remark,
+            created_at=now,
+            updated_at=now
+        )
+        db.add(maintenance_record)
+
+        equipment = work_order.equipment
+        if equipment:
+            equipment.status = EquipmentStatus.ONLINE
+            equipment.fault_count = (equipment.fault_count or 0) + 1
+            if equipment.fault_count >= 3:
+                equipment.is_frequent_fault = True
+
+        db.commit()
+        db.refresh(work_order)
+        db.refresh(maintenance_record)
+
+        return True, "工单完成成功", work_order, maintenance_record
+
+    @staticmethod
+    def get_maintenance_records_by_equipment(
+        db: Session,
+        equipment_id: int
+    ) -> List[MaintenanceRecord]:
+        return db.query(MaintenanceRecord).filter(
+            MaintenanceRecord.equipment_id == equipment_id
+        ).order_by(MaintenanceRecord.created_at.desc()).all()
+
+    @staticmethod
+    def list_maintenance_records(
+        db: Session,
+        page: int = 1,
+        page_size: int = 20
+    ) -> Tuple[List[MaintenanceRecord], int]:
+        query = db.query(MaintenanceRecord)
+        total = query.count()
+        items = query.order_by(MaintenanceRecord.created_at.desc()).offset(
+            (page - 1) * page_size
+        ).limit(page_size).all()
+        return items, total
+
+    @staticmethod
+    def mark_equipment_frequent_fault(
+        db: Session,
+        equipment_id: int,
+        is_frequent: bool
+    ) -> Tuple[bool, str, Optional[Equipment]]:
+        equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
+        if not equipment:
+            return False, "设备不存在", None
+
+        equipment.is_frequent_fault = is_frequent
+        db.commit()
+        db.refresh(equipment)
+
+        return True, "操作成功", equipment

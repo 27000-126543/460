@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models import Notification, Member, Booking, Payment
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Tuple
 
 
 def create_notification(
@@ -160,3 +160,107 @@ def notify_booking_restriction_lifted(db: Session, member: Member):
         title="预订限制已解除",
         content=f"您的账户已恢复正常，余额充足（当前余额：¥{member.balance}），预订服务已解除限制，可正常预订。"
     )
+
+
+def list_member_notifications(
+    db: Session,
+    member_id: int,
+    page: int = 1,
+    page_size: int = 20,
+    notification_type: Optional[str] = None,
+    is_read: Optional[bool] = None
+) -> Tuple[List[Notification], int]:
+    query = db.query(Notification).filter(Notification.member_id == member_id)
+    if notification_type:
+        query = query.filter(Notification.type == notification_type)
+    if is_read is not None:
+        query = query.filter(Notification.is_read == is_read)
+    total = query.count()
+    notifications = query.order_by(Notification.created_at.desc()).offset(
+        (page - 1) * page_size
+    ).limit(page_size).all()
+    return notifications, total
+
+
+def list_admin_notifications(
+    db: Session,
+    admin_id: int,
+    page: int = 1,
+    page_size: int = 20,
+    notification_type: Optional[str] = None,
+    is_read: Optional[bool] = None
+) -> Tuple[List[Notification], int]:
+    query = db.query(Notification).filter(Notification.admin_id == admin_id)
+    if notification_type:
+        query = query.filter(Notification.type == notification_type)
+    if is_read is not None:
+        query = query.filter(Notification.is_read == is_read)
+    total = query.count()
+    notifications = query.order_by(Notification.created_at.desc()).offset(
+        (page - 1) * page_size
+    ).limit(page_size).all()
+    return notifications, total
+
+
+def mark_as_read(
+    db: Session,
+    notification_id: int,
+    user_type: str,
+    user_id: int
+) -> Optional[Notification]:
+    query = db.query(Notification).filter(Notification.id == notification_id)
+    if user_type == "member":
+        query = query.filter(Notification.member_id == user_id)
+    elif user_type == "admin":
+        query = query.filter(Notification.admin_id == user_id)
+    notification = query.first()
+    if not notification:
+        return None
+    notification.is_read = True
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+def mark_batch_as_read(
+    db: Session,
+    notification_ids: List[int],
+    user_type: str,
+    user_id: int
+) -> int:
+    query = db.query(Notification).filter(Notification.id.in_(notification_ids))
+    if user_type == "member":
+        query = query.filter(Notification.member_id == user_id)
+    elif user_type == "admin":
+        query = query.filter(Notification.admin_id == user_id)
+    count = query.update({Notification.is_read: True}, synchronize_session=False)
+    db.commit()
+    return count
+
+
+def mark_all_as_read(
+    db: Session,
+    user_type: str,
+    user_id: int
+) -> int:
+    query = db.query(Notification)
+    if user_type == "member":
+        query = query.filter(Notification.member_id == user_id)
+    elif user_type == "admin":
+        query = query.filter(Notification.admin_id == user_id)
+    count = query.update({Notification.is_read: True}, synchronize_session=False)
+    db.commit()
+    return count
+
+
+def get_unread_count(
+    db: Session,
+    user_type: str,
+    user_id: int
+) -> int:
+    query = db.query(Notification).filter(Notification.is_read == False)
+    if user_type == "member":
+        query = query.filter(Notification.member_id == user_id)
+    elif user_type == "admin":
+        query = query.filter(Notification.admin_id == user_id)
+    return query.count()
