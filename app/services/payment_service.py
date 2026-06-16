@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models import Payment, PaymentStatus, Member
 from app.services.member_service import MemberService
-from app.services.notification_service import notify_payment_completed, notify_balance_insufficient
+from app.services.notification_service import notify_payment_completed, notify_balance_insufficient, notify_booking_restriction_lifted
 from datetime import datetime
 from typing import Optional, List, Tuple
 
@@ -65,7 +65,12 @@ class PaymentService:
         if not member:
             return False, "会员不存在", None
 
+        was_restricted = member.booking_restricted
+
         member.balance += amount
+
+        if member.booking_restricted and member.balance >= 0:
+            member.booking_restricted = False
 
         payment = Payment(
             member_id=member_id,
@@ -78,6 +83,9 @@ class PaymentService:
         db.add(payment)
         db.commit()
         db.refresh(payment)
+
+        if was_restricted and not member.booking_restricted:
+            notify_booking_restriction_lifted(db, member)
 
         return True, "充值成功", payment
 

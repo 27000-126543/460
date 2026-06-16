@@ -101,6 +101,8 @@ class MemberService:
             return False, "会员不存在"
         if not member.is_active:
             return False, "会员账户已被禁用"
+        if member.booking_restricted:
+            return False, "账户余额不足，已限制预订，请先充值"
         if member.default_count >= 3:
             return False, "违约次数过多，预订受限"
         available_credit = member.balance + member.credit_limit

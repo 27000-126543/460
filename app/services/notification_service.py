@@ -101,3 +101,62 @@ def notify_approval_escalated(db: Session, booking: Booking, admin_level: int):
             title="预订审核已升级",
             content=f"预订（编号：{booking.id}）审核超时，已升级至{admin_level}级管理员处理。"
         )
+
+
+def notify_work_order_created(db: Session, work_order, engineer=None):
+    from app.models import Admin
+    admins = db.query(Admin).filter(Admin.is_active == True).all()
+    for admin in admins:
+        create_notification(
+            db,
+            admin_id=admin.id,
+            notification_type="work_order",
+            title="新的设备故障工单",
+            content=f"有新的设备故障工单（编号：{work_order.id}），设备：{work_order.equipment.name if work_order.equipment else '未知'}，故障类型：{work_order.fault_type.value}，严重程度：{work_order.severity.value}，请及时处理。"
+        )
+    if engineer:
+        notify_work_order_assigned(db, work_order, engineer)
+
+
+def notify_work_order_escalated(db: Session, work_order, admin_level: int):
+    from app.models import Admin
+    admins = db.query(Admin).filter(Admin.level >= admin_level, Admin.is_active == True).all()
+    for admin in admins:
+        create_notification(
+            db,
+            admin_id=admin.id,
+            notification_type="work_order",
+            title="工单已升级",
+            content=f"设备故障工单（编号：{work_order.id}）处理超时，已升级至{admin_level}级管理员处理。当前状态：{work_order.status.value}。"
+        )
+
+
+def notify_work_order_assigned(db: Session, work_order, engineer):
+    create_notification(
+        db,
+        member_id=None,
+        admin_id=None,
+        notification_type="work_order",
+        title="您有新的工单分配",
+        content=f"工程师 {engineer.name}，您已被分配设备故障工单（编号：{work_order.id}），设备：{work_order.equipment.name if work_order.equipment else '未知'}，位置：{work_order.floor}楼{work_order.area or ''} {work_order.location or ''}，请及时接单处理。"
+    )
+
+
+def notify_booking_restricted(db: Session, member: Member):
+    create_notification(
+        db,
+        member_id=member.id,
+        notification_type="payment",
+        title="预订服务已限制",
+        content=f"由于您的账户余额不足且信用额度已用尽，预订服务已暂时限制。当前余额：¥{member.balance}，请及时充值恢复服务。"
+    )
+
+
+def notify_booking_restriction_lifted(db: Session, member: Member):
+    create_notification(
+        db,
+        member_id=member.id,
+        notification_type="payment",
+        title="预订限制已解除",
+        content=f"您的账户已恢复正常，余额充足（当前余额：¥{member.balance}），预订服务已解除限制，可正常预订。"
+    )

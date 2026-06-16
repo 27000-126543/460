@@ -47,6 +47,9 @@ class BookingService:
         if not can_book:
             return False, reason, None
 
+        if member.booking_restricted:
+            return False, "账户余额不足，已限制预订，请先充值", None
+
         booking = Booking(
             member_id=member_id,
             resource_id=booking_data.resource_id,
@@ -168,7 +171,7 @@ class BookingService:
         hours = calculate_hours(booking.actual_start_time, actual_end)
         resource = ResourceService.get_resource_by_id(db, booking.resource_id)
         actual_amount = calculate_cost(resource.hourly_rate, hours) if resource else booking.total_amount
-        booking.actual_amount = min(actual_amount, booking.total_amount)
+        booking.actual_amount = actual_amount
 
         member = MemberService.get_member_by_id(db, booking.member_id)
         if member:
@@ -187,8 +190,19 @@ class BookingService:
                 from app.services.notification_service import notify_payment_completed
                 notify_payment_completed(db, payment, member)
             else:
-                from app.services.notification_service import notify_balance_insufficient
-                notify_balance_insufficient(db, member)
+                member.balance -= booking.actual_amount
+                from app.models import Payment, PaymentStatus
+                payment = Payment(
+                    booking_id=booking.id,
+                    member_id=member.id,
+                    amount=booking.actual_amount,
+                    status=PaymentStatus.PENDING,
+                    payment_type="balance"
+                )
+                db.add(payment)
+                member.booking_restricted = True
+                from app.services.notification_service import notify_booking_restricted
+                notify_booking_restricted(db, member)
 
         db.commit()
         db.refresh(booking)

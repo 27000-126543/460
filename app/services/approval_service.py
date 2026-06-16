@@ -27,7 +27,7 @@ class ApprovalService:
         if status:
             query = query.filter(Approval.status == status)
         if approver_level:
-            query = query.filter(Approval.approver_level == approver_level)
+            query = query.filter(Approval.approver_level <= approver_level)
 
         total = query.count()
         items = query.order_by(Approval.submitted_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -106,31 +106,44 @@ class ApprovalService:
             Approval.submitted_at < timeout_threshold
         ).all()
 
-        for approval in pending_approvals:
+        escalated_approvals = db.query(Approval).filter(
+            Approval.status == ApprovalStatus.ESCALATED,
+            Approval.escalated_at < timeout_threshold
+        ).all()
+
+        all_timeout_approvals = pending_approvals + escalated_approvals
+
+        max_level_result = db.query(Admin.level).order_by(Admin.level.desc()).first()
+        max_level_value = max_level_result[0] if max_level_result else 3
+
+        for approval in all_timeout_approvals:
             booking = db.query(Booking).filter(Booking.id == approval.booking_id).first()
             if not booking:
                 continue
 
-            next_level = approval.approver_level + 1
-            max_level = db.query(Admin.level).order_by(Admin.level.desc()).first()
-            max_level_value = max_level[0] if max_level else 3
+            now = datetime.now()
 
-            if next_level <= max_level_value:
-                approval.status = ApprovalStatus.ESCALATED
-                approval.approver_level = next_level
-                approval.escalated_at = datetime.now()
-                notify_approval_escalated(db, booking, next_level)
-            else:
+            if approval.approver_level >= max_level_value:
                 approval.status = ApprovalStatus.APPROVED
                 approval.approver_level = max_level_value
-                approval.processed_at = datetime.now()
-                approval.remark = "超时自动通过"
+                approval.processed_at = now
+                old_remark = approval.remark or ""
+                approval.remark = (old_remark + "；" if old_remark else "") + "超时自动通过"
                 booking.status = BookingStatus.APPROVED
 
                 from app.models import Member
                 member = db.query(Member).filter(Member.id == booking.member_id).first()
                 if member:
                     notify_booking_approved(db, booking, member)
+            else:
+                next_level = approval.approver_level + 1
+                approval.status = ApprovalStatus.ESCALATED
+                approval.approver_level = next_level
+                approval.escalated_at = now
+                old_remark = approval.remark or ""
+                level_info = f"升级至{next_level}级审批"
+                approval.remark = (old_remark + "；" if old_remark else "") + level_info
+                notify_approval_escalated(db, booking, next_level)
 
         db.commit()
-        return len(pending_approvals)
+        return len(all_timeout_approvals)

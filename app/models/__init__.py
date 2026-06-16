@@ -45,6 +45,46 @@ class PaymentStatus(str, enum.Enum):
     REFUNDED = "refunded"
 
 
+class EquipmentType(str, enum.Enum):
+    PROJECTOR = "projector"
+    AIR_CONDITIONER = "air_conditioner"
+    PRINTER = "printer"
+    ROUTER = "router"
+    LIGHT = "light"
+    OTHER = "other"
+
+
+class EquipmentStatus(str, enum.Enum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    MALFUNCTION = "malfunction"
+
+
+class FaultType(str, enum.Enum):
+    OVERHEAT = "overheat"
+    OVERCURRENT = "overcurrent"
+    OFFLINE = "offline"
+    HARDWARE = "hardware"
+    SOFTWARE = "software"
+    OTHER = "other"
+
+
+class FaultSeverity(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class WorkOrderStatus(str, enum.Enum):
+    PENDING = "pending"
+    ASSIGNED = "assigned"
+    ACCEPTED = "accepted"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ESCALATED = "escalated"
+
+
 class Member(Base):
     __tablename__ = "members"
 
@@ -58,6 +98,7 @@ class Member(Base):
     balance = Column(Float, default=0.0, nullable=False)
     default_count = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    booking_restricted = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -172,3 +213,80 @@ class Notification(Base):
 
     member = relationship("Member", back_populates="notifications")
     admin = relationship("Admin", back_populates="notifications")
+
+
+class Equipment(Base):
+    __tablename__ = "equipments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    type = Column(Enum(EquipmentType), nullable=False)
+    floor = Column(Integer, nullable=False)
+    area = Column(String(50))
+    location = Column(String(200))
+    status = Column(Enum(EquipmentStatus), default=EquipmentStatus.ONLINE, nullable=False)
+    resource_id = Column(Integer, ForeignKey("resources.id"))
+    temp_threshold = Column(Float, default=80.0, nullable=False)
+    current_threshold = Column(Float, default=15.0, nullable=False)
+    description = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    data_records = relationship("EquipmentData", back_populates="equipment")
+    work_orders = relationship("WorkOrder", back_populates="equipment")
+
+
+class EquipmentData(Base):
+    __tablename__ = "equipment_data"
+
+    id = Column(Integer, primary_key=True, index=True)
+    equipment_id = Column(Integer, ForeignKey("equipments.id"), nullable=False, index=True)
+    temperature = Column(Float)
+    current = Column(Float)
+    is_online = Column(Boolean, default=True, nullable=False)
+    raw_data = Column(Text)
+    is_anomaly = Column(Boolean, default=False, nullable=False)
+    anomaly_details = Column(Text)
+    reported_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    equipment = relationship("Equipment", back_populates="data_records")
+
+
+class Engineer(Base):
+    __tablename__ = "engineers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    phone = Column(String(20), nullable=False)
+    specialty = Column(String(200))
+    floor_range = Column(String(200))
+    is_available = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    work_orders = relationship("WorkOrder", back_populates="engineer")
+
+
+class WorkOrder(Base):
+    __tablename__ = "work_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    equipment_id = Column(Integer, ForeignKey("equipments.id"), nullable=False, index=True)
+    engineer_id = Column(Integer, ForeignKey("engineers.id"), index=True)
+    fault_type = Column(Enum(FaultType), nullable=False)
+    severity = Column(Enum(FaultSeverity), default=FaultSeverity.MEDIUM, nullable=False)
+    status = Column(Enum(WorkOrderStatus), default=WorkOrderStatus.PENDING, nullable=False, index=True)
+    description = Column(Text)
+    floor = Column(Integer, nullable=False)
+    area = Column(String(50))
+    location = Column(String(200))
+    escalation_level = Column(Integer, default=0, nullable=False)
+    assigned_at = Column(DateTime(timezone=True))
+    accepted_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+    escalated_at = Column(DateTime(timezone=True))
+    remark = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    equipment = relationship("Equipment", back_populates="work_orders")
+    engineer = relationship("Engineer", back_populates="work_orders")

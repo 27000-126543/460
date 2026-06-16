@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import SessionLocal, engine, Base
-from app.models import Admin, Resource, ResourceType, ResourceStatus, Member, MemberLevel
+from app.models import Admin, Resource, ResourceType, ResourceStatus, Member, MemberLevel, EquipmentType, EquipmentStatus, Equipment, Engineer
 from app.utils import hash_password
 
 
@@ -84,6 +84,40 @@ def init_database():
             )
             db.add(gold_member)
             print("创建黄金会员: gold@example.com / gold123 (免审批)")
+
+        equipments_data = [
+            {"name": "1楼A区-投影仪01", "type": EquipmentType.PROJECTOR, "floor": 1, "area": "A区", "location": "A区会议室旁", "temp_threshold": 70, "current_threshold": 10},
+            {"name": "1楼A区-空调01", "type": EquipmentType.AIR_CONDITIONER, "floor": 1, "area": "A区", "location": "A区办公区", "temp_threshold": 50, "current_threshold": 15},
+            {"name": "1楼A区-空调02", "type": EquipmentType.AIR_CONDITIONER, "floor": 1, "area": "A区", "location": "A区会议区", "temp_threshold": 50, "current_threshold": 15},
+            {"name": "1楼A区-打印机01", "type": EquipmentType.PRINTER, "floor": 1, "area": "A区", "location": "A区入口处", "temp_threshold": 60, "current_threshold": 5},
+            {"name": "2楼B区-投影仪01", "type": EquipmentType.PROJECTOR, "floor": 2, "area": "B区", "location": "B区会议室旁", "temp_threshold": 70, "current_threshold": 10},
+            {"name": "2楼B区-空调01", "type": EquipmentType.AIR_CONDITIONER, "floor": 2, "area": "B区", "location": "B区办公区", "temp_threshold": 50, "current_threshold": 15},
+            {"name": "2楼B区-空调02", "type": EquipmentType.AIR_CONDITIONER, "floor": 2, "area": "B区", "location": "B区会议区", "temp_threshold": 50, "current_threshold": 15},
+            {"name": "2楼B区-打印机01", "type": EquipmentType.PRINTER, "floor": 2, "area": "B区", "location": "B区入口处", "temp_threshold": 60, "current_threshold": 5},
+            {"name": "3楼C区-投影仪01", "type": EquipmentType.PROJECTOR, "floor": 3, "area": "C区", "location": "C区会议室旁", "temp_threshold": 70, "current_threshold": 10},
+            {"name": "3楼C区-空调01", "type": EquipmentType.AIR_CONDITIONER, "floor": 3, "area": "C区", "location": "C区办公区", "temp_threshold": 50, "current_threshold": 15},
+            {"name": "3楼C区-路由器01", "type": EquipmentType.ROUTER, "floor": 3, "area": "C区", "location": "C区机房", "temp_threshold": 55, "current_threshold": 3},
+        ]
+
+        for eq_data in equipments_data:
+            existing = db.query(Equipment).filter(Equipment.name == eq_data["name"]).first()
+            if not existing:
+                equipment = Equipment(**eq_data, status=EquipmentStatus.ONLINE)
+                db.add(equipment)
+                print(f"创建设备: {eq_data['name']}")
+
+        engineers_data = [
+            {"name": "张工", "phone": "13800000001", "specialty": "overheat,overcurrent,projector", "floor_range": "1-2"},
+            {"name": "李工", "phone": "13800000002", "specialty": "air_conditioner,offline", "floor_range": "2-3"},
+            {"name": "王工", "phone": "13800000003", "specialty": "printer,router,hardware", "floor_range": "1,3"},
+        ]
+
+        for eng_data in engineers_data:
+            existing = db.query(Engineer).filter(Engineer.phone == eng_data["phone"]).first()
+            if not existing:
+                engineer = Engineer(**eng_data, is_available=True)
+                db.add(engineer)
+                print(f"创建工程师: {eng_data['name']}")
 
         db.commit()
         print("\n初始化数据完成！")
